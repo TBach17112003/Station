@@ -12,8 +12,8 @@ from utils.Cloud_COM.Cloud_COM import Cloud_COM
 
 # Define your directories and other variables here
 UPLOAD_DIR = "software_files"
-BOOT_DIR = os.path.join(UPLOAD_DIR, "FOTA_Master_boot")
-APP_DIR = os.path.join(UPLOAD_DIR, "FOTA_Master_app")
+BOOT_DIR = os.path.join(UPLOAD_DIR, "FOTA_Master_Boot")
+APP_DIR = os.path.join(UPLOAD_DIR, "FOTA_Master_App")
 CLIENT_DIR = os.path.join(UPLOAD_DIR, "FOTA_Client")
 
 # Create upload directories if they don't exist
