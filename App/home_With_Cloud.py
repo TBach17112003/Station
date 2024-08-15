@@ -197,9 +197,9 @@ class HomeWindow:
 
 
     def get_dest_dir(self, file_type):
-        if file_type == "FOTA_Master_boot":
+        if file_type == "FOTA_Master_Boot":
             return BOOT_DIR
-        elif file_type == "FOTA_Master_app":
+        elif file_type == "FOTA_Master_App":
             return APP_DIR
         elif file_type == "FOTA_Client":
             return CLIENT_DIR
