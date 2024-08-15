@@ -1,277 +1,450 @@
+# main_application.py
 import customtkinter as ctk
-import re
-from tkinter import messagebox, filedialog, ttk
-import sys
-import os
-import shutil
-import subprocess
+from tkinter import ttk
 import tkinter as tk
-import realtime_With_3D
-import all_data
-from utils.Cloud_COM.Cloud_COM import Cloud_COM
+import trimesh
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+import numpy as np
+import threading
+import time
+import random
+import cv2
+from PIL import Image, ImageTk
+from get_Img_new import WebSocketCameraClient
+from data_store import DataStore
+from web_socket_client import WebSocketClient
+import asyncio
 
-# Define your directories and other variables here
-UPLOAD_DIR = "software_files"
-BOOT_DIR = os.path.join(UPLOAD_DIR, "FOTA_Master_boot")
-APP_DIR = os.path.join(UPLOAD_DIR, "FOTA_Master_app")
-CLIENT_DIR = os.path.join(UPLOAD_DIR, "FOTA_Client")
-
-# Create upload directories if they don't exist
-for directory in [BOOT_DIR, APP_DIR, CLIENT_DIR]:
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-class HomeWindow:
+class Realtime_ChartWindow:
     def __init__(self, root):
         self.root = root
-        self.root.title("FOTA-CBDS_Station")
-        self.root.geometry("600x480")
+        self.data_window = ctk.CTkToplevel(self.root)
+        self.data_window.title("View Real-time Data")
+        self.data_window.geometry("1200x900")
 
-        self.bg_color = "#000000"
-        self.root.configure(bg=self.bg_color)
+        self.create_layout()
 
-        self.header_frame = ctk.CTkFrame(root, height=80, fg_color=self.bg_color)
-        self.header_frame.pack(fill=ctk.X)
+        # Initialize yaw, pitch, roll, accelerometer, and gyroscope
+        self.yaw = 0
+        self.pitch = 0
+        self.roll = 0
+        self.accel_x = 0
+        self.accel_y = 0
+        self.accel_z = 0
+        self.gyro_x = 0
+        self.gyro_y = 0
+        self.gyro_z = 0
+        self.battery_status = 100
 
-        self.header_label = ctk.CTkLabel(self.header_frame, text="Home", text_color="white", font=("MS Sans Serif", 24, "bold"), bg_color=self.bg_color)
-        self.header_label.pack(pady=20)
+        # Track the latest 50 changes
+        self.yaw_history = []
+        self.pitch_history = []
+        self.roll_history = []
+        self.accel_x_history = []
+        self.accel_y_history = []
+        self.accel_z_history = []
+        self.gyro_x_history = []
+        self.gyro_y_history = []
+        self.gyro_z_history = []
 
-        self.content_frame = ctk.CTkFrame(root, fg_color=self.bg_color)
-        self.content_frame.pack(expand=True, fill=ctk.BOTH)
+        # Create charts
+        self.create_ypr_chart(self.yaw_frame)
+        self.create_accel_chart(self.pitch_frame)
+        self.create_gyro_chart(self.roll_frame)
 
-        self.welcome_label = ctk.CTkLabel(self.content_frame, text="Welcome to CBDS-FOTA SW Station!", bg_color=self.bg_color, text_color="white", font=("MS Sans Serif", 18))
-        self.welcome_label.pack(pady=30)
+        # Create car orientation plot
+        self.create_car_orientation_plot(self.orientation_frame)
 
-        self.upload_file_button = ctk.CTkButton(self.content_frame, text="Upload File", command=self.choose_file_type_for_upload, fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
-        self.upload_file_button.pack(pady=10)
-
-        self.create_file_button = ctk.CTkButton(self.content_frame, text="Create New File", command=self.choose_file_type_for_creation, fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
-        self.create_file_button.pack(pady=10)
-
-        self.view_files_button = ctk.CTkButton(self.content_frame, text="View Software", command=self.view_files, fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
-        self.view_files_button.pack(pady=10)
-
-        self.view_data_button = ctk.CTkButton(self.content_frame, text="View Real-time Data", command=self.open_chart_window, fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
-        self.view_data_button.pack(pady=10)
-
-        self.Cloud_COM = Cloud_COM()
-        success, error_message = self.Cloud_COM.startConnect()
-        if not success:
-            messagebox.showerror("Error", f"Server connection failed: {error_message}")
-            exit()
-
-        # # Create AllData_ChartWindow frame
-        # self.all_data_frame = all_data(self)
-        # self.all_data_frame.grid(row=0, column=0, sticky='nsew')
-
-        # # Button to open AllData_ChartWindow
-        # self.view_data_button = tk.Button(self, text="View All Data", command=self.show_all_data_window)
-        # self.view_data_button.grid(row=1, column=0, pady=10)
-
-        self.chart_window = None
-
-
-    def choose_file_type_for_upload(self):
-        self.file_type_window = ctk.CTkToplevel(self.root)
-        self.file_type_window.title("Choose File Type")
-        self.file_type_window.geometry("300x200")
-        self.file_type_window.attributes("-topmost", True)
-
-        self.boot_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_boot", command=lambda: self.ask_for_version("FOTA_Master_boot"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
-        self.boot_button.pack(pady=10)
-
-        self.app_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_app", command=lambda: self.ask_for_version("FOTA_Master_app"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
-        self.app_button.pack(pady=10)
-
-        self.client_button = ctk.CTkButton(self.file_type_window, text="FOTA Client", command=lambda: self.ask_for_version("FOTA_Client"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
-        self.client_button.pack(pady=10)
-
-    def upload_file(self, file_type):
-        if self.Cloud_COM.isSendingInProgress():
-            messagebox.showinfo("Info", "Cannot upload a new file while a previous send is in progress.")
-            return
-
-        self.file_type_window.destroy()
-        file_path = filedialog.askopenfilename(filetypes=[("Python Files", "*.py"), ("Binary Files", "*.bin")])
-
-        if file_path:
-            self.save_file(file_path, file_type)
-
-
-    def choose_file_type_for_creation(self):
-        self.file_type_window = ctk.CTkToplevel(self.root)
-        self.file_type_window.title("Choose File Type")
-        self.file_type_window.geometry("300x200")
-        self.file_type_window.attributes("-topmost", True)
-
-        self.boot_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_boot", command=lambda: self.ask_for_version("FOTA_Master_boot"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
-        self.boot_button.pack(pady=10)
-
-        self.app_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_app", command=lambda: self.ask_for_version("FOTA_Master_app"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
-        self.app_button.pack(pady=10)
-
-        self.client_button = ctk.CTkButton(self.file_type_window, text="FOTA Client", command=lambda: self.ask_for_version("FOTA_Client"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
-        self.client_button.pack(pady=10)
-
-    def ask_for_version(self, file_type):
-        self.file_type_window.destroy()
+        self.websocket_client = WebSocketClient(uri="wss://begvn.home:9090/realtime/data", cert_path=r'C:\Users\HOB6HC\Code_Source\FOTA_Station\App\ca.crt')
         
-        # Get the current version as a string
-        version_str = self.get_current_version(file_type)
-        
-        try:
-            # Convert the version string to a float
-            current_version = float(version_str)
-        except ValueError:
-            print(f"Invalid version format: {version_str}")
-            return
-        
-        major_version = int(current_version)  # Extract major version as an integer
-        minor_version = int(round((current_version - major_version) * 10))  # Extract minor version as an integer
-        
-        # print(f"Current version: {current_version}")
-        # print(f"Major version: {major_version}")
-        # print(f"Minor version: {minor_version}")
+        # Start WebSocket client in a separate thread
+        self.websocket_thread = threading.Thread(target=self.websocket_client.start)
+        self.websocket_thread.daemon = True
+        self.websocket_thread.start()
 
-        self.version_choice_window = ctk.CTkToplevel(self.root)
-        self.version_choice_window.title("Choose Version")
-        self.version_choice_window.geometry("300x150")
-        self.version_choice_window.attributes("-topmost", True)
+        # Start data update threads
+        self.update_data_thread = threading.Thread(target=self.run_event_loop_in_thread, daemon=True)
+        self.update_car_orientation_thread = threading.Thread(target=self.update_car_orientation_continuously, daemon=True)
+        self.update_data_thread.start()
+        self.update_car_orientation_thread.start()
 
-        big_update_version = major_version + 1
+        # Initialize WebSocket client
+        self.websocket_client = WebSocketCameraClient("wss://begvn.home:9090/realtime/streaming", capath=r'C:\Users\HOB6HC\Code_Source\FOTA_Station\App\ca.crt')
+        self.websocket_thread = threading.Thread(target=self.run_websocket_client, daemon=True)
+        self.websocket_thread.start()
 
-        # Calculate the next minor version correctly
-        if minor_version < 9:
-            small_update_version = f"{major_version}.{minor_version + 1}"
+        # Start webcam feed
+        self.create_webcam_feed(self.camera_frame)
+
+        # Bind keyboard events
+        self.data_window.bind("<KeyPress>", self.on_key_press)
+
+    def run_websocket_client(self):
+        asyncio.run(self.websocket_client.start())
+
+    def on_key_press(self, event):
+        # if event.keysym == "w":
+        #     self.pitch = min(self.pitch + 5, 90)  # Limit pitch to 90 degrees
+        # elif event.keysym == "s":
+        #     self.pitch = max(self.pitch - 5, -90)  # Limit pitch to -90 degrees
+        # elif event.keysym == "a":
+        #     self.yaw = max(self.yaw - 5, -180)  # Wrap around the yaw
+        # elif event.keysym == "d":
+        #     self.yaw = min(self.yaw + 5, 180)  # Wrap around the yaw
+        pass
+    def create_layout(self):
+        self.camera_frame = ctk.CTkFrame(self.data_window, width=800, height=300)
+        self.camera_frame.grid(row=0, column=0, columnspan=2, sticky="nsew")
+
+        self.orientation_frame = ctk.CTkFrame(self.data_window, width=400, height=300)
+        self.orientation_frame.grid(row=0, column=2, sticky="nsew")
+
+        self.yaw_frame = ctk.CTkFrame(self.data_window, width=400, height=600)
+        self.yaw_frame.grid(row=1, column=0, sticky="nsew")
+
+        self.pitch_frame = ctk.CTkFrame(self.data_window, width=400, height=600)
+        self.pitch_frame.grid(row=1, column=1, sticky="nsew")
+
+        self.roll_frame = ctk.CTkFrame(self.data_window, width=400, height=600)
+        self.roll_frame.grid(row=1, column=2, sticky="nsew")
+
+        self.data_window.grid_rowconfigure(0, weight=1)
+        self.data_window.grid_rowconfigure(1, weight=1)
+        self.data_window.grid_columnconfigure(0, weight=1)
+        self.data_window.grid_columnconfigure(1, weight=1)
+        self.data_window.grid_columnconfigure(2, weight=1)
+
+    def create_car_orientation_plot(self, frame):
+        self.orientation_fig = plt.figure(figsize=(6, 3))
+        self.orientation_ax = self.orientation_fig.add_subplot(111, projection='3d')
+
+        # Load the car model
+        self.car_scene = trimesh.load(r'C:\Users\HOB6HC\Code_Source\FOTA_Station_Up1-main\model\Porsche.obj')
+
+        # Check if the scene contains geometries
+        if isinstance(self.car_scene, trimesh.Scene):
+            if len(self.car_scene.geometry) == 0:
+                raise ValueError("The scene does not contain any geometries.")
+            self.car_model = list(self.car_scene.geometry.values())[0]
         else:
-            # If minor_version is 9, roll over to the next major version
-            small_update_version = f"{major_version + 1}.0"
+            self.car_model = self.car_scene
 
-        # Display buttons for big and small updates
-        next_button = ctk.CTkButton(
-            self.version_choice_window,
-            text=f"Big Update Version: ({big_update_version}.0)",
-            command=lambda: self.select_version(file_type, big_update_version, 0),
-            fg_color="#1DB954",
-            text_color="white",
-            font=("MS Sans Serif", 12, "bold")
+        # Get the vertices and faces of the car model
+        self.car_vertices = self.car_model.vertices
+        self.car_faces = self.car_model.faces
+
+        # Resize the car model to fit in the plot
+        self.car_vertices -= self.car_vertices.mean(axis=0)
+        scale_factor = 300 / np.max(self.car_vertices.ptp(axis=0))  # Scale to 300 units
+        self.car_vertices *= scale_factor
+
+        # Rotate the car model so its initial forward direction (Z-axis) points to the negative Y-axis
+        # To do this, we need to rotate around the X-axis by 90 degrees and then reverse the direction by rotating 180 degrees around the Z-axis
+        angle_x = np.radians(90)  # Rotate 90 degrees around the X-axis
+        angle_z = np.radians(180)  # Rotate 180 degrees around the Z-axis
+
+        rotation_matrix_x = np.array([
+            [1, 0, 0],
+            [0, np.cos(angle_x), -np.sin(angle_x)],
+            [0, np.sin(angle_x), np.cos(angle_x)]
+        ])
+
+        rotation_matrix_z = np.array([
+            [np.cos(angle_z), -np.sin(angle_z), 0],
+            [np.sin(angle_z), np.cos(angle_z), 0],
+            [0, 0, 1]
+        ])
+
+        # Combined rotation matrix
+        combined_rotation_matrix = rotation_matrix_z @ rotation_matrix_x
+
+        self.car_vertices = self.car_vertices @ combined_rotation_matrix.T
+
+        # Create the Poly3DCollection object
+        self.car_poly3d = Poly3DCollection(self.car_vertices[self.car_faces], alpha=.25, linewidths=1, edgecolors='none')
+        self.orientation_ax.add_collection3d(self.car_poly3d)
+
+        self.orientation_ax.set_xlabel('Yaw')
+        self.orientation_ax.set_ylabel('Roll')
+        self.orientation_ax.set_zlabel('Pitch')
+
+        self.orientation_ax.set_xlim([-180, 180])
+        self.orientation_ax.set_ylim([-180, 180])
+        self.orientation_ax.set_zlim([-90, 90])
+
+        self.orientation_canvas = FigureCanvasTkAgg(self.orientation_fig, master=frame)
+        self.orientation_canvas.draw()
+        self.orientation_canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Initialize battery status text
+        self.battery_text = self.orientation_ax.text(
+            180, 90, 360,  # Replace these with the actual coordinates where you want the text to appear
+            f"Battery: {self.battery_status:.2f}%",
+            color='black', fontsize=8, horizontalalignment='right', verticalalignment='top'
         )
-        next_button.pack(pady=10)
 
-        minor_version_int, minor_version_fraction = map(int, small_update_version.split('.'))
-        small_update_button = ctk.CTkButton(
-            self.version_choice_window,
-            text=f"Small Update Version: ({small_update_version})",
-            command=lambda: self.select_version(file_type, minor_version_int, minor_version_fraction),
-            fg_color="#1DB954",
-            text_color="white",
-            font=("MS Sans Serif", 12, "bold")
+        self.update_car_orientation()
+
+    def update_battery_status(self):
+        # Update the battery status
+        self.battery_status = max(self.battery_status - random.uniform(0.1, 0.5), 0)  # Simulate battery drain and ensure it doesn't go below 0
+
+        # Remove the old text
+        for text in self.orientation_ax.texts:
+            text.remove()
+
+        # Format the battery status to show only two decimal places
+        formatted_battery_status = f"Battery: {self.battery_status:.2f}%"
+
+        # Add the new text
+        self.battery_text = self.orientation_ax.text(
+            180, 90, 360,  # Position it at the top-right corner
+            f"Battery: {formatted_battery_status}%",
+            color='black', fontsize=8, horizontalalignment='right', verticalalignment='top'
         )
-        small_update_button.pack(pady=10)
+        self.orientation_canvas.draw()
 
+    def update_car_orientation(self):
+        # Rotation matrices for yaw, pitch, roll
+        roll_matrix = np.array([
+            [np.cos(np.radians(self.roll)), 0, np.sin(np.radians(self.roll))],
+            [0, 1, 0],
+            [-np.sin(np.radians(self.roll)), 0, np.cos(np.radians(self.roll))]
+        ])
+        
+        pitch_matrix = np.array([
+            [1, 0, 0],
+            [0, np.cos(np.radians(self.pitch)), -np.sin(np.radians(self.pitch))],
+            [0, np.sin(np.radians(self.pitch)), np.cos(np.radians(self.pitch))]
+        ])
+        
+        yaw_matrix = np.array([
+            [np.cos(np.radians(self.yaw)), -np.sin(np.radians(self.yaw)), 0],
+            [np.sin(np.radians(self.yaw)), np.cos(np.radians(self.yaw)), 0],
+            [0, 0, 1]
+        ])
 
-    def select_version(self, file_type, major_version, minor_version):
-        self.version_choice_window.destroy()
-        file_path = filedialog.askopenfilename(filetypes=[("Python Files", "*.py")])
-        if file_path:
-            self.save_file(file_path, file_type, major_version, minor_version)
+        # Combined rotation matrix
+        rotation_matrix = yaw_matrix @ pitch_matrix @ roll_matrix
 
-    def get_current_version(self, file_type):
-        dest_dir = self.get_dest_dir(file_type)
-        existing_files = [f for f in os.listdir(dest_dir) if f.startswith(file_type)]
-        version_pattern = re.compile(rf"{file_type}_(\d+)\.(\d+).py")
+        # Apply rotation to car vertices
+        rotated_vertices = self.car_vertices @ rotation_matrix.T
+        self.car_poly3d.set_verts(rotated_vertices[self.car_faces])
 
-        versions = []
-        for filename in existing_files:
-            match = version_pattern.search(filename)
-            if match:
-                major, minor = map(int, match.groups())
-                versions.append((major, minor))
+        # Redraw the plot
+        self.orientation_canvas.draw()
 
-        if versions:
-            # Return the highest version, formatted as a string
-            return f"{max(versions)[0]}.{max(versions)[1]}"
-        else:
-            # Default to version 0.0 if no versions are found
-            return "0.0"
+    def update_car_orientation_continuously(self):
+        while True:
+            self.update_car_orientation()
+            self.update_battery_status()
+            #time.sleep(0.1)
 
+    def create_ypr_chart(self, frame):
+        fig, ax = plt.subplots(3, 1, figsize=(5, 8))
 
-    def get_dest_dir(self, file_type):
-        if file_type == "FOTA_Master_boot":
-            return BOOT_DIR
-        elif file_type == "FOTA_Master_app":
-            return APP_DIR
-        elif file_type == "FOTA_Client":
-            return CLIENT_DIR
+        self.yaw_line, = ax[0].plot([], [], label="Yaw")
+        self.pitch_line, = ax[1].plot([], [], label="Pitch")
+        self.roll_line, = ax[2].plot([], [], label="Roll")
 
-    def create_file(self, file_type):
-        self.file_type_window.destroy()
-        file_path = filedialog.asksaveasfilename(defaultextension=".py", filetypes=[("Python Files", "*.py")])
-        if file_path:
-            with open(file_path, "w") as file:
-                file.write("# New Python file")
-            self.ask_for_version(file_type, file_path)
+        ax[0].set_ylim(-180, 180)
+        ax[1].set_ylim(-90, 90)
+        ax[2].set_ylim(-180, 180)
 
-    def save_file(self, file_path, file_type, major_version, minor_version):
-        dest_dir = self.get_dest_dir(file_type)
-        if not os.path.exists(dest_dir):
-            os.makedirs(dest_dir)
+        for a in ax:
+            a.set_xlim(0, 50)
+            a.legend()
+            a.grid(True)
 
-        new_filename_py = f"{file_type}_{major_version}.{minor_version}.py"
-        dest_path = os.path.join(dest_dir, new_filename_py)
-        shutil.copy(file_path, dest_path)
-        self.Cloud_COM.SendSW(dest_path,self.show_message)
-        # messagebox.showinfo("Success", f"File {new_filename} has been uploaded successfully")
-        self.view_files()
+        self.ypr_fig = fig
+        self.ypr_ax = ax
 
-    def show_message(self,filename,Status):
-        if Status == True:
-            messagebox.showinfo("Success", f"File {filename} has been uploaded successfully")
-        else: 
-            messagebox.showinfo("Failed", f"File {filename} has been uploaded failed")
+        self.ypr_canvas = FigureCanvasTkAgg(self.ypr_fig, master=frame)
+        self.ypr_canvas.get_tk_widget().pack(side=tk.LEFT, fill=ctk.BOTH, expand=True)
 
-    def view_files(self):
-        files_window = ctk.CTkToplevel(self.root)
-        files_window.title("View Software")
-        files_window.geometry("600x400")
-        files_window.attributes("-topmost", True)
-        files_window.config(bg="#2C2F33")
+    def create_accel_chart(self, frame):
+        fig, ax = plt.subplots(3, 1, figsize=(5, 8))
 
-        # Create a notebook widget for tabs
-        notebook = ttk.Notebook(files_window)
-        notebook.pack(expand=True, fill=ctk.BOTH)
+        self.accel_x_line, = ax[0].plot([], [], label="Accel X")
+        self.accel_y_line, = ax[1].plot([], [], label="Accel Y")
+        self.accel_z_line, = ax[2].plot([], [], label="Accel Z")
 
-        # Define folder names and their corresponding tabs
-        folders = {
-            "FOTA Master_boot": BOOT_DIR,
-            "FOTA Master_app": APP_DIR,
-            "FOTA Client": CLIENT_DIR
-        }
+        ax[0].set_ylim(-1000, 1000)
+        ax[1].set_ylim(-1000, 1000)
+        ax[2].set_ylim(-1000, 1000)
 
-        for tab_name, dir_name in folders.items():
-            tab = ttk.Frame(notebook)
-            notebook.add(tab, text=tab_name)
+        for a in ax:
+            a.set_xlim(0, 50)
+            a.legend()
+            a.grid(True)
 
-            tree = ttk.Treeview(tab, columns=("File Name", "Path"), show="headings", height=10)
-            tree.heading("File Name", text="File Name")
-            tree.heading("Path", text="Path")
-            tree.pack(expand=True, fill=ctk.BOTH, padx=10, pady=10)
+        self.accel_fig = fig
+        self.accel_ax = ax
 
-            for filename in os.listdir(dir_name):
-                if filename.endswith(".py"):  # List only Python files
-                    filepath = os.path.join(dir_name, filename)
-                    tree.insert("", ctk.END, values=(filename, filepath))
+        self.accel_canvas = FigureCanvasTkAgg(self.accel_fig, master=frame)
+        self.accel_canvas.get_tk_widget().pack(side=tk.LEFT, fill=ctk.BOTH, expand=True)
 
-            tree.bind("<Double-1>", self.open_in_idle)
+    def create_gyro_chart(self, frame):
+        fig, ax = plt.subplots(3, 1, figsize=(5, 8))
 
-        close_button = ctk.CTkButton(files_window, text="Close", command=files_window.destroy, fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
-        close_button.pack(pady=10)
+        self.gyro_x_line, = ax[0].plot([], [], label="Gyro X")
+        self.gyro_y_line, = ax[1].plot([], [], label="Gyro Y")
+        self.gyro_z_line, = ax[2].plot([], [], label="Gyro Z")
 
-    def open_in_idle(self, event):
-        selected_item = event.widget.selection()[0]
-        file_path = event.widget.item(selected_item)['values'][1]
-        subprocess.Popen([sys.executable, '-m', 'idlelib', file_path])
+        ax[0].set_ylim(0, 2000)
+        ax[1].set_ylim(0, 2000)
+        ax[2].set_ylim(0, 2000)
 
-    def open_chart_window(self):
-        if self.chart_window is None or not self.chart_window.data_window.winfo_exists():
-            self.chart_window = realtime_With_3D.Realtime_ChartWindow(self.root)
+        for a in ax:
+            a.set_xlim(0, 50)
+            a.legend()
+            a.grid(True)
+
+        self.gyro_fig = fig
+        self.gyro_ax = ax
+
+        self.gyro_canvas = FigureCanvasTkAgg(self.gyro_fig, master=frame)
+        self.gyro_canvas.get_tk_widget().pack(side=tk.LEFT, fill=ctk.BOTH, expand=True)
+
+    def create_webcam_feed(self, frame):
+        self.webcam_label = ctk.CTkLabel(frame)
+        self.webcam_label.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        self.update_webcam_feed()
+
+    def update_webcam_feed(self):
+        frame = self.websocket_client.get_frame()
+        if frame is not None:
+            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            image = Image.fromarray(image)
+            image = ImageTk.PhotoImage(image)
+            self.webcam_label.configure(image=image)
+            self.webcam_label.image = image
+
+        self.root.after(100, self.update_webcam_feed)  # Update every 100 ms
+
+    async def update_data(self):
+        
+        while True:
+            data_store = DataStore()
+            
+            # Use values from DataStore
+            self.yaw = data_store.yaw
+            self.pitch = data_store.pitch
+            self.roll = data_store.roll
+            self.accel_x = data_store.accel_x
+            self.accel_y = data_store.accel_y
+            self.accel_z = data_store.accel_z
+            self.gyro_x = data_store.gyro_x
+            self.gyro_y = data_store.gyro_y
+            self.gyro_z = data_store.gyro_z
+
+            # Append to history
+            self.yaw_history.append(self.yaw)
+            self.pitch_history.append(self.pitch)
+            self.roll_history.append(self.roll)
+            self.accel_x_history.append(self.accel_x)
+            self.accel_y_history.append(self.accel_y)
+            self.accel_z_history.append(self.accel_z)
+            self.gyro_x_history.append(self.gyro_x)
+            self.gyro_y_history.append(self.gyro_y)
+            self.gyro_z_history.append(self.gyro_z)
+
+            # Maintain only the latest 50 records
+            if len(self.yaw_history) > 50:
+                self.yaw_history.pop(0)
+            if len(self.pitch_history) > 50:
+                self.pitch_history.pop(0)
+            if len(self.roll_history) > 50:
+                self.roll_history.pop(0)
+            if len(self.accel_x_history) > 50:
+                self.accel_x_history.pop(0)
+            if len(self.accel_y_history) > 50:
+                self.accel_y_history.pop(0)
+            if len(self.accel_z_history) > 50:
+                self.accel_z_history.pop(0)
+            if len(self.gyro_x_history) > 50:
+                self.gyro_x_history.pop(0)
+            if len(self.gyro_y_history) > 50:
+                self.gyro_y_history.pop(0)
+            if len(self.gyro_z_history) > 50:
+                self.gyro_z_history.pop(0)
+
+            # Update charts
+            self.update_ypr_chart()
+            self.update_accel_chart()
+            self.update_gyro_chart()
+
+            # time.sleep(1)  # Adjust the sleep interval as needed
+    def run_event_loop_in_thread(self):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(self.update_data())
+
+    def update_ypr_chart(self):
+        self.yaw_history.append(self.yaw)
+        self.pitch_history.append(self.pitch)
+        self.roll_history.append(self.roll)
+
+        if len(self.yaw_history) > 50:
+            self.yaw_history.pop(0)
+            self.pitch_history.pop(0)
+            self.roll_history.pop(0)
+
+        self.yaw_line.set_data(range(len(self.yaw_history)), self.yaw_history)
+        self.pitch_line.set_data(range(len(self.pitch_history)), self.pitch_history)
+        self.roll_line.set_data(range(len(self.roll_history)), self.roll_history)
+
+        for ax in self.ypr_ax:
+            ax.set_xlim(0, len(self.yaw_history))
+
+        self.ypr_canvas.draw()
+
+    def update_accel_chart(self):
+        self.accel_x_history.append(self.accel_x)
+        self.accel_y_history.append(self.accel_y)
+        self.accel_z_history.append(self.accel_z)
+
+        if len(self.accel_x_history) > 50:
+            self.accel_x_history.pop(0)
+            self.accel_y_history.pop(0)
+            self.accel_z_history.pop(0)
+
+        self.accel_x_line.set_data(range(len(self.accel_x_history)), self.accel_x_history)
+        self.accel_y_line.set_data(range(len(self.accel_y_history)), self.accel_y_history)
+        self.accel_z_line.set_data(range(len(self.accel_z_history)), self.accel_z_history)
+
+        for ax in self.accel_ax:
+            ax.set_xlim(0, len(self.accel_x_history))
+
+        self.accel_canvas.draw()
+
+    def update_gyro_chart(self):
+        self.gyro_x_history.append(self.gyro_x)
+        self.gyro_y_history.append(self.gyro_y)
+        self.gyro_z_history.append(self.gyro_z)
+
+        if len(self.gyro_x_history) > 50:
+            self.gyro_x_history.pop(0)
+            self.gyro_y_history.pop(0)
+            self.gyro_z_history.pop(0)
+
+        self.gyro_x_line.set_data(range(len(self.gyro_x_history)), self.gyro_x_history)
+        self.gyro_y_line.set_data(range(len(self.gyro_y_history)), self.gyro_y_history)
+        self.gyro_z_line.set_data(range(len(self.gyro_z_history)), self.gyro_z_history)
+
+        for ax in self.gyro_ax:
+            ax.set_xlim(0, len(self.gyro_x_history))
+
+        self.gyro_canvas.draw()
+
+    
+
+    
+
+if __name__ == "__main__":
+    root = ctk.CTk()
+    app = Realtime_ChartWindow(root)
+    root.mainloop()
