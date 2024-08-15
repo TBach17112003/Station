@@ -57,7 +57,7 @@ class Realtime_ChartWindow:
         # Create car orientation plot
         self.create_car_orientation_plot(self.orientation_frame)
 
-        self.websocket_client = WebSocketClient(uri="wss://begvn.home:9090/realtime/data", cert_path=r'C:\Users\HOB6HC\Code_Source\FOTA_Station_Up1-main\App\ca.crt')
+        self.websocket_client = WebSocketClient(uri="wss://begvn.home:9090/realtime/data", cert_path=r'C:\Users\HOB6HC\Code_Source\FOTA_Station\App\ca.crt')
         
         # Start WebSocket client in a separate thread
         self.websocket_thread = threading.Thread(target=self.websocket_client.start)
@@ -71,7 +71,7 @@ class Realtime_ChartWindow:
         self.update_car_orientation_thread.start()
 
         # Initialize WebSocket client
-        self.websocket_client = WebSocketCameraClient("wss://begvn.home:9090/realtime/streaming", capath=r'C:\Users\HOB6HC\Code_Source\FOTA_Station_Up1-main\App\ca.crt')
+        self.websocket_client = WebSocketCameraClient("wss://begvn.home:9090/realtime/streaming", capath=r'C:\Users\HOB6HC\Code_Source\FOTA_Station\App\ca.crt')
         self.websocket_thread = threading.Thread(target=self.run_websocket_client, daemon=True)
         self.websocket_thread.start()
 
