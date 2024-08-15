@@ -57,6 +57,7 @@ class HomeWindow:
 
         self.Cloud_COM = Cloud_COM()
         success, error_message = self.Cloud_COM.startConnect()
+        # print(self.Cloud_COM.getSW_Ver('FOTA_Master_Boot'))
         if not success:
             messagebox.showerror("Error", f"Server connection failed: {error_message}")
             exit()

@@ -8,6 +8,7 @@ import paho.mqtt.client as mqtt
 import threading
 from utils.Cloud_COM.Security import Security
 import time
+import re
 
 File_path = os.path.abspath(__file__)
 Folder_Dir = os.path.dirname(File_path)
@@ -46,7 +47,24 @@ class Cloud_COM:
         self.isFTPConnected = False
         self.isMQTTConnected = False
         self.sending_in_progress = False
+        self.SendStatus = False
         self.isSendDone = False
+        self.SWType_list = ['FOTA_Master_Boot','FOTA_Master_App','FOTA_Client']
+        self.Version_list = {
+            'FOTA_Master_Boot': {
+                'Major': 0,
+                'Minor': 0
+            },
+            'FOTA_Master_App': {
+                'Major': 0,
+                'Minor': 0
+            },
+            'FOTA_Client': {
+                'Major': 0,
+                'Minor': 0
+            }
+        }
+        self.SWTopic_list = ['SW/Jetson/FOTA_Master_Boot','SW/Jetson/FOTA_Master_App','SW/Jetson/FOTA_Client']
         # self.isReceiveResponse = False
 
     def startConnect(self):
@@ -83,31 +101,66 @@ class Cloud_COM:
             return
 
     def FTP_Disconnect(self):
-        self.ftps.quit()
-        self.isFTPConnected = False
+        if self.isFTPConnected == True:
+            self.ftps.quit()
+            self.isFTPConnected = False
 
     def MQTT_Connect(self):
         self.MQTTclient.username_pw_set(self.user, self.passwd)
         self.MQTTclient.connect(self.host,self.MQTTPort)
-        # self.MQTTclient.loop_start()
+        self.MQTTclient.loop_start()
+        for SWTopic in self.SWTopic_list:
+            StatusCode = self.MQTTclient.subscribe(SWTopic,qos=1)
+            # print(StatusCode)
         self.MQTTclient.on_message = self.MQTT_On_message
         self.isMQTTConnected = True
 
     def MQTT_Disconnect(self):
         # self.MQTTclient.loop_stop()
-        self.MQTTclient.disconnect()
-        self.isMQTTConnected = False
+        if self.isMQTTConnected == True:
+            self.MQTTclient.disconnect()
+            self.isMQTTConnected = False
 
-    def MQTT_On_message(self,client, userdata, message):
+    def MQTT_On_message(self,client, userdata, message: mqtt.MQTTMessage):
         print(message.payload.decode())
         payload = message.payload.decode()
-        if payload == 'Done':
-            self.isSendDone = True
-        elif payload == "Fail":
-            self.isSendDone = False
-        else:
-            return
-        self.MQTT_Disconnect()
+        topic = message.topic
+        if topic == 'SWUpload':
+            print('Upload: ',payload)
+            if payload == 'Done':
+                self.SendStatus = True
+                self.isSendDone = True
+            elif payload == "Fail":
+                self.SendStatus = False
+                self.isSendDone = True
+
+            else:
+                return
+        # elif topic == 'SW/Jetson/FOTA_Master_Boot':
+        #     self.MasterBoot_SW = payload
+        # elif topic == 'SW/Jetson/FOTA_Master_App':
+        #     self.MasterApp_SW = payload
+        # elif topic == 'SW/Jetson/FOTA_Master_Client':
+        #     self.Client_SW = payload
+        elif topic in self.SWTopic_list:
+            self.recvSW_Ver(payload)
+        # self.MQTT_Disconnect()
+
+    def recvSW_Ver(self,SWName):
+        match = re.match(r"v_(.*)_v([\d]+)\.([\d]+)", SWName)
+        if match == None:
+            return 
+        SWType,MajorVer,MinorVer = match.groups()
+        if not SWType in self.SWType_list:
+            return 
+        self.Version_list[SWType]['Major'] = MajorVer
+        self.Version_list[SWType]['Major'] = MajorVer
+        # print('Version: ',self.Version_list)
+
+    def getSW_Ver(self,SWType: str):
+        if SWType in self.SWType_list:
+            return self.Version_list[SWType]
+        return None
 
     def isSendingInProgress(self):
         return self.sending_in_progress
@@ -144,9 +197,16 @@ class Cloud_COM:
                 print(f'send enc time: {end_time-start_time_without_enc}')
                 self.FTP_Disconnect()
                 self.MQTTclient.publish('SWUpload', SWname, qos=2)
-                self.MQTTclient.subscribe('SWUpload', qos=2)
-                self.MQTTclient.loop_forever()
-                SendSWCB(SWname,self.isSendDone)
+                status = self.MQTTclient.subscribe('SWUpload', qos=2)
+                # print('Sub status: ',status)
+                # self.MQTTclient.loop_forever()
+                startTimeout = time.time()
+                while self.isSendDone == False:
+                    if time.time() - startTimeout > 60:
+                        break
+                SendSWCB(SWname,self.SendStatus)
+                self.SendStatus = False
+                self.isSendDone = False
         except Exception as e:
             print("Send error: ", e)
             SendSWCB(SWname, False)
