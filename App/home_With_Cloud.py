@@ -213,21 +213,16 @@ class HomeWindow:
             self.ask_for_version(file_type, file_path)
 
     def save_file(self, file_path, file_type, major_version, minor_version):
-        if file_type == "FOTA_Master_Boot":
-            dest_dir = BOOT_DIR
-        elif file_type == "FOTA_Master_App":
-            dest_dir = APP_DIR
-        elif file_type == "FOTA_Client":
-            dest_dir = CLIENT_DIR
+        dest_dir = self.get_dest_dir(file_type)
+        if not os.path.exists(dest_dir):
+            os.makedirs(dest_dir)
 
-        # version = self.get_next_version(dest_dir, file_type)
-        # new_file = f"{file_type}"
-        new_filename_py = f"{file_type}.py"
+        new_filename_py = f"n_{file_type}_v{major_version}.{minor_version}.py"
         dest_path = os.path.join(dest_dir, new_filename_py)
         shutil.copy(file_path, dest_path)
         self.Cloud_COM.SendSW(dest_path,self.show_message)
         # messagebox.showinfo("Success", f"File {new_filename} has been uploaded successfully")
-        self.view_files()
+        #self.view_files()
 
     def show_message(self,filename,Status):
         if Status == True:
