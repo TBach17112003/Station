@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tkinter as tk
 import realtime_With_3D
+import realtime_With_3D_CamWS
 import all_data
 from utils.Cloud_COM.Cloud_COM import Cloud_COM
 
@@ -60,16 +61,7 @@ class HomeWindow:
             messagebox.showerror("Error", f"Server connection failed: {error_message}")
             exit()
 
-        # # Create AllData_ChartWindow frame
-        # self.all_data_frame = all_data(self)
-        # self.all_data_frame.grid(row=0, column=0, sticky='nsew')
-
-        # # Button to open AllData_ChartWindow
-        # self.view_data_button = tk.Button(self, text="View All Data", command=self.show_all_data_window)
-        # self.view_data_button.grid(row=1, column=0, pady=10)
-
         self.chart_window = None
-
 
     def choose_file_type_for_upload(self):
         self.file_type_window = ctk.CTkToplevel(self.root)
@@ -77,10 +69,10 @@ class HomeWindow:
         self.file_type_window.geometry("300x200")
         self.file_type_window.attributes("-topmost", True)
 
-        self.boot_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_boot", command=lambda: self.ask_for_version("FOTA_Master_boot"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
+        self.boot_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_Boot", command=lambda: self.ask_for_version("FOTA_Master_Boot"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
         self.boot_button.pack(pady=10)
 
-        self.app_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_app", command=lambda: self.ask_for_version("FOTA_Master_app"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
+        self.app_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_App", command=lambda: self.ask_for_version("FOTA_Master_App"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
         self.app_button.pack(pady=10)
 
         self.client_button = ctk.CTkButton(self.file_type_window, text="FOTA Client", command=lambda: self.ask_for_version("FOTA_Client"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
@@ -97,17 +89,16 @@ class HomeWindow:
         if file_path:
             self.save_file(file_path, file_type)
 
-
     def choose_file_type_for_creation(self):
         self.file_type_window = ctk.CTkToplevel(self.root)
         self.file_type_window.title("Choose File Type")
         self.file_type_window.geometry("300x200")
         self.file_type_window.attributes("-topmost", True)
 
-        self.boot_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_boot", command=lambda: self.ask_for_version("FOTA_Master_boot"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
+        self.boot_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_Boot", command=lambda: self.ask_for_version("FOTA_Master_Boot"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
         self.boot_button.pack(pady=10)
 
-        self.app_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_app", command=lambda: self.ask_for_version("FOTA_Master_app"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
+        self.app_button = ctk.CTkButton(self.file_type_window, text="FOTA Master_App", command=lambda: self.ask_for_version("FOTA_Master_App"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
         self.app_button.pack(pady=10)
 
         self.client_button = ctk.CTkButton(self.file_type_window, text="FOTA Client", command=lambda: self.ask_for_version("FOTA_Client"), fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
@@ -128,10 +119,6 @@ class HomeWindow:
         
         major_version = int(current_version)  # Extract major version as an integer
         minor_version = int(round((current_version - major_version) * 10))  # Extract minor version as an integer
-        
-        # print(f"Current version: {current_version}")
-        # print(f"Major version: {major_version}")
-        # print(f"Minor version: {minor_version}")
 
         self.version_choice_window = ctk.CTkToplevel(self.root)
         self.version_choice_window.title("Choose Version")
@@ -169,7 +156,6 @@ class HomeWindow:
         )
         small_update_button.pack(pady=10)
 
-
     def select_version(self, file_type, major_version, minor_version):
         self.version_choice_window.destroy()
         file_path = filedialog.askopenfilename(filetypes=[("Python Files", "*.py")])
@@ -195,7 +181,6 @@ class HomeWindow:
             # Default to version 0.0 if no versions are found
             return "0.0"
 
-
     def get_dest_dir(self, file_type):
         if file_type == "FOTA_Master_Boot":
             return BOOT_DIR
@@ -220,15 +205,13 @@ class HomeWindow:
         new_filename_py = f"n_{file_type}_v{major_version}.{minor_version}.py"
         dest_path = os.path.join(dest_dir, new_filename_py)
         shutil.copy(file_path, dest_path)
-        self.Cloud_COM.SendSW(dest_path,self.show_message)
-        # messagebox.showinfo("Success", f"File {new_filename} has been uploaded successfully")
-        #self.view_files()
+        self.Cloud_COM.SendSW(dest_path, self.show_message)
 
-    def show_message(self,filename,Status):
-        if Status == True:
+    def show_message(self, filename, Status):
+        if Status:
             messagebox.showinfo("Success", f"File {filename} has been uploaded successfully")
-        else: 
-            messagebox.showinfo("Failed", f"File {filename} has been uploaded failed")
+        else:
+            messagebox.showinfo("Failed", f"File {filename} upload failed")
 
     def view_files(self):
         files_window = ctk.CTkToplevel(self.root)
@@ -243,8 +226,8 @@ class HomeWindow:
 
         # Define folder names and their corresponding tabs
         folders = {
-            "FOTA Master_boot": BOOT_DIR,
-            "FOTA Master_app": APP_DIR,
+            "FOTA Master_Boot": BOOT_DIR,
+            "FOTA Master_App": APP_DIR,
             "FOTA Client": CLIENT_DIR
         }
 
@@ -274,4 +257,4 @@ class HomeWindow:
 
     def open_chart_window(self):
         if self.chart_window is None or not self.chart_window.data_window.winfo_exists():
-            self.chart_window = realtime_With_3D.Realtime_ChartWindow(self.root)
+            self.chart_window = realtime_With_3D_CamWS.Realtime_ChartWindow(self.root)
