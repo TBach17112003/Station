@@ -76,7 +76,7 @@ class Cloud_COM:
 
             self.ftps.set_pasv(True)
             self.ftps.prot_p()
-            self.ftps.cwd("NewSW")
+            self.ftps.cwd("SW")
             self.isFTPConnected = True
         except:
             print("FTP Connect failed")
