@@ -1,0 +1,291 @@
+import sys
+import hub
+from hub import port         # Port module to set / get Port from LEGO hub
+from hub import display      # Display module to control LEGO hub Display Screen
+from hub import Image        # Image module to use built-in image
+from hub import button       # To use Button on LEGO hub
+from hub import led          # To control LED on LEGO hub
+from hub import motion       # For current motion status on LEGO hub
+from hub import sound
+from hub import USB_VCP
+from utime import sleep_ms, ticks_ms  # Import delay function and ticks for timing
+import math
+# Setup Ports, Motors, Sensors
+MotorA = port.A.motor        # MotorA defines the port A of Hub
+MotorB = port.B.motor        # MotorB defines the port B of Hub
+MotorB.default(max_power = 50, stop = 2)
+
+# Setup necessary Variables
+command = bytes([])
+message = bytes([])
+new_SW = False          #Check new SW available
+safe_State = True       #Safe_State for flashing new SW
+motor_running = False   #Check if any motor is busy
+motor_end_time = 0      #The limit time for running car to stop
+angle = 0               #Setup Angle for reset and go forward
+direct = 0
+safe_period = 0         #Set time to maintain Safe_state
+vcp = USB_VCP(0)        #Set USB Virtual ComPort
+vcp.init(flow = USB_VCP.RTS | USB_VCP.CTS)
+last_sensor_send = 0
+last_hub_send = 0
+# Timer interval (milliseconds)
+timer_interval = 0
+sensor_end_time = 10
+hub_end_time = 1000
+
+crc_table = []
+for byte in range(256):
+    crc = 0
+    for _ in range(8):
+        if (byte ^ crc) & 1:
+            crc = (crc >> 1) ^ 0xA001
+        else:
+            crc >>= 1
+        byte >>= 1
+    crc_table.append(crc)
+ 
+def calc_crc_modbus(data):
+    crc = 0xFFFF
+    for byte in data:
+        crc = (crc >> 8) ^ crc_table[(crc ^ byte) & 0xFF]
+    return crc.to_bytes(2, 'little')
+    
+
+def set_timer_interval(interval):
+    global timer_interval
+    timer_interval = interval
+
+def request_Flash_SW():     #When car in Safe State, it will request the Master to flash new SW
+    global new_SW
+    global vcp
+
+    data = bytes([1, 122, 0, 0, 0, 111])
+    message = bytes([35]) + data + calc_crc_modbus(data[0:6])
+
+    hub.led(8)
+    vcp.write(message)
+    new_SW = False
+    vcp.close()
+    sys.exit()
+
+def response_Confirmation():    #When car receive Notify new SW successfully, it will response the Confirmation to Master
+    global new_SW
+    global vcp
+
+    new_SW = True
+    data = bytes([1, 121, 0, 0, 0, 0])
+    message = bytes([35]) + data + calc_crc_modbus(data[0:6])
+    hub.led(5)
+    vcp.write(message)
+    
+    if safe_State == True:
+        request_Flash_SW()
+
+def response_Flash_Status():    #The Master will ask whether new SW is flashed successfully or not
+    hub.led(3)
+    data = bytes([1, 124, 0, 0, 0, 0])
+    message = bytes([35]) + data + bytes(calc_crc_modbus(data[0:6]))
+    vcp.write(message)
+
+def send_Hub_Info():
+    data = bytes([1, 240, 0, 0, int(hub.battery.temperature()), hub.battery.capacity_left()])
+    message = bytes([35]) + data + bytes(calc_crc_modbus(data[0:6]))
+    vcp.write(message)
+
+def send_IMU_Sensor():
+    # global message
+    rotations = motion.yaw_pitch_roll()
+    sign_byte = 0
+    if rotations[0] < 0 and rotations [1] < 0 and rotations[2] < 0 :
+        sign_byte = 111
+    elif rotations[0] < 0 and rotations [1] < 0 and rotations[2] >= 0 :
+        sign_byte = 110
+    elif rotations[0] < 0 and rotations [1] >= 0 and rotations[2] < 0 :
+        sign_byte = 101
+    elif rotations[0] < 0 and rotations [1] >= 0 and rotations[2] >= 0 :
+        sign_byte = 100
+    elif rotations[0] >= 0 and rotations [1] < 0 and rotations[2] < 0 :
+        sign_byte = 11
+    elif rotations[0] >= 0 and rotations [1] < 0 and rotations[2] >= 0 :
+        sign_byte = 10
+    elif rotations[0] >= 0 and rotations [1] > 0 and rotations[2] < 0 :
+        sign_byte = 1
+    elif rotations[0] >= 0 and rotations [1] >= 0 and rotations[2] >= 0 :
+        sign_byte = 0
+    
+    data = bytes([1, 200, sign_byte, int(math.fabs(rotations[0])), int(math.fabs(rotations[1])), int(math.fabs(rotations[2]))]) 
+    print (rotations[0])
+    print (rotations[1])
+    print (rotations[2])   
+    message = bytes([35]) + data + bytes(calc_crc_modbus(data[0:6]))
+    vcp.write(message)
+    
+
+    accelerations = motion.accelerometer()
+    acceleration_value = accelerations[0]
+    if acceleration_value < 0:
+        acceleration_value = (1 << 32) + acceleration_value
+
+    mapped_byte_array = acceleration_value.to_bytes(4, 'big')
+    data =  bytes([1, 210]) + mapped_byte_array 
+    message = bytes([35]) + data + bytes(calc_crc_modbus(data[0:6]))
+    vcp.write(message)
+
+    acceleration_value = accelerations[1]
+    if acceleration_value < 0:
+        acceleration_value = (1 << 32) + acceleration_value
+        
+    mapped_byte_array = acceleration_value.to_bytes(4, 'big')
+    data =  bytes([1, 211]) + mapped_byte_array 
+    message = bytes([35]) + data + bytes(calc_crc_modbus(data[0:6]))
+    vcp.write(message)
+
+    acceleration_value = accelerations[2]
+    if acceleration_value < 0:
+        acceleration_value = (1 << 32) + acceleration_value
+        
+    mapped_byte_array = acceleration_value.to_bytes(4, 'big')
+    data =  bytes([1, 212]) + mapped_byte_array 
+    message = bytes([35]) + data + bytes(calc_crc_modbus(data[0:6]))
+    vcp.write(message)
+
+    rates = motion.gyroscope()
+    gyroscope_value = rates[0]
+    if gyroscope_value < 0:
+        gyroscope_value = (1 << 32) + gyroscope_value
+        
+    mapped_byte_array = gyroscope_value.to_bytes(4, 'big')
+    data =  bytes([1, 220]) + mapped_byte_array 
+    message = bytes([35]) + data + bytes(calc_crc_modbus(data[0:6]))
+    vcp.write(message)
+
+    gyroscope_value = rates[1]
+    if gyroscope_value < 0:
+        gyroscope_value = (1 << 32) + gyroscope_value
+        
+    mapped_byte_array = gyroscope_value.to_bytes(4, 'big')
+    data =  bytes([1, 221]) + mapped_byte_array 
+    message = bytes([35]) + data + bytes(calc_crc_modbus(data[0:6]))
+    vcp.write(message)
+
+    gyroscope_value = rates[2]
+    if gyroscope_value < 0:
+        gyroscope_value = (1 << 32) + gyroscope_value
+        
+    mapped_byte_array = gyroscope_value.to_bytes(4, 'big')
+    data =  bytes([1, 222]) + mapped_byte_array 
+    message = bytes([35]) + data + bytes(calc_crc_modbus(data[0:6]))
+    vcp.write(message)
+
+    
+
+    # rates = motion.gyroscope()
+    # mapped_gyroscope = [map_to_byte(gyro) for gyro in rates]
+    # print(mapped_gyroscope[0], mapped_gyroscope[1], mapped_gyroscope[2])
+    # message = bytes([35, 1, 202, 0, mapped_gyroscope[0], mapped_gyroscope[1], mapped_gyroscope[2], 0, 0])
+    # vcp.write(message)
+    
+    gesture = motion.gesture()
+    if gesture == None:
+        gesture = 0
+    data = bytes([1, 230, 0, 0, 0, gesture])
+    message = bytes([35]) + data + calc_crc_modbus(data[0:6])
+    vcp.write(message)
+
+def run_Forward():
+    
+    MotorB.run_for_time(250, speed = -50)
+    #sleep_ms(1000)
+    #MotorB.brake()
+
+def turn_LeftRight():
+    global angle, direct
+    if command[3] == 0:
+        MotorA.run_for_degrees(command[4], speed = 50)
+        #sleep_ms(10)
+        direct = -50
+    else:
+        MotorA.run_for_degrees(command[4], speed = -50)
+        #sleep_ms(10)
+        direct = 50
+    angle = command[4]
+ 
+def stop_Motor():
+    MotorB.brake()
+
+def run_Backward():
+    
+    MotorB.run_for_time(250, speed = 50)
+    #sleep_ms(1000)
+    #MotorB.brake()
+
+
+def classify_Command(command):  #This function will define which kind of message that the car receive is
+    hub.led(1)
+    if command[1] == 120:
+        response_Confirmation()
+    elif command[1] == 123: 
+        response_Flash_Status()
+    elif command[1] == 110:
+        run_Forward()
+    elif command[1] == 111:
+        turn_LeftRight()
+    elif command[1] == 112:
+        stop_Motor()
+    elif command[1] == 113:
+        run_Backward()
+
+def handle_VCP():
+    global vcp
+    global command
+    global safe_State
+    
+    if vcp.isconnected():
+        
+        if vcp.any(): #aAAe
+            #hub.led(8)
+            start_char = vcp.read(1)
+            if start_char == b'#':
+                command = vcp.read(8)
+                if command[6:8] == calc_crc_modbus(command[0:6]):
+                    hub.led(3)
+                    classify_Command(command)
+                else:
+                    hub.led(8)
+        if safe_State == True and new_SW == True:
+            request_Flash_SW()
+
+def timer_function(callback):
+    global timer_interval
+    start_time = ticks_ms()
+    
+    while True:
+        current_time = ticks_ms()
+        if current_time - start_time >= timer_interval:
+            start_time = current_time
+            callback()
+            break
+
+
+while (True):
+    handle_VCP()
+    # Get the current time
+    current_time = ticks_ms()
+    
+    # Check if 10 milliseconds have passed
+    if current_time - last_sensor_send >= sensor_end_time:
+        # Update the start time
+        last_sensor_send = current_time
+
+        # Print the current time
+        # Print sensor data
+        send_IMU_Sensor()
+        
+    # Check if 1 seconds have passed
+    if current_time - last_hub_send >= hub_end_time:
+        # Update the start time
+        last_hub_send = current_time
+
+        # Print sensor data
+        send_Hub_Info()
