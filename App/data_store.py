@@ -17,3 +17,5 @@ class DataStore:
         self.gyro_x = 0
         self.gyro_y = 0
         self.gyro_z = 0
+        self.battery = 0
+        self.temperature = 0
