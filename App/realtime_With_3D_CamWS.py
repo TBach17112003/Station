@@ -108,6 +108,12 @@ class Realtime_ChartWindow:
         if event.keysym == "d":
             status =self.Cloud_COM.MQTT_SendControl("d")
             print(status)
+        if event.keysym == "q":
+            status =self.Cloud_COM.MQTT_SendControl("q")
+            print(status)
+        if event.keysym == "c":
+            status =self.Cloud_COM.MQTT_SendControl("c")
+            print(status)
         # elif event.keysym == "s":
         #     self.pitch = max(self.pitch - 5, -90)  # Limit pitch to -90 degrees
         # elif event.keysym == "a":
@@ -370,9 +376,9 @@ class Realtime_ChartWindow:
         self.gyro_z_line, = ax[2].plot([], [], label="Gyro Z")
 
         # Set the y-axis limits for each subplot
-        ax[0].set_ylim(0, 2000)  # Gyroscope X range
-        ax[1].set_ylim(0, 2000)  # Gyroscope Y range
-        ax[2].set_ylim(0, 2000)  # Gyroscope Z range
+        ax[0].set_ylim(-500, 500)  # Gyroscope X range
+        ax[1].set_ylim(-500, 500)  # Gyroscope Y range
+        ax[2].set_ylim(-500, 500)  # Gyroscope Z range
 
         # Configure each subplot
         for a in ax:
@@ -403,7 +409,7 @@ class Realtime_ChartWindow:
             self.webcam_label.configure(image=image)
             self.webcam_label.image = image
 
-        self.root.after(100, self.update_webcam_feed)  # Update every 100 ms
+        self.root.after(10, self.update_webcam_feed)  # Update every 100 ms
 
     async def update_data(self):
         
