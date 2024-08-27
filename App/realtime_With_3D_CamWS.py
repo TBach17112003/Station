@@ -16,9 +16,11 @@ from get_Img_new import WebSocketCameraClient
 from data_store import DataStore
 from web_socket_client import WebSocketClient
 import asyncio
+from utils.Cloud_COM.Cloud_COM import Cloud_COM
+
 
 class Realtime_ChartWindow:
-    def __init__(self, root):
+    def __init__(self, root,cloudCOM: Cloud_COM):
         self.root = root
         self.data_window = ctk.CTkToplevel(self.root)
         self.data_window.title("View Real-time Data")
@@ -36,7 +38,7 @@ class Realtime_ChartWindow:
         self.gyro_x = 0
         self.gyro_y = 0
         self.gyro_z = 0
-        self.battery_status = 100
+        self.battery_status = 0
 
         # Track the latest 50 changes
         self.yaw_history = []
@@ -48,14 +50,15 @@ class Realtime_ChartWindow:
         self.gyro_x_history = []
         self.gyro_y_history = []
         self.gyro_z_history = []
-
+        
+        self.Cloud_COM = cloudCOM
         # Create charts
         self.create_ypr_chart(self.yaw_frame)
         self.create_accel_chart(self.pitch_frame)
         self.create_gyro_chart(self.roll_frame)
 
         # Create car orientation plot
-        self.create_car_orientation_plot(self.orientation_frame)
+        self.create_car_orientation_window()
 
         self.websocket_client = WebSocketClient(uri="wss://begvn.home:9090/realtime/data", cert_path=r'C:\Users\HOB6HC\Code_Source\FOTA_Station\App\ca.crt')
         
@@ -77,7 +80,7 @@ class Realtime_ChartWindow:
 
         # Start webcam feed
         self.create_webcam_feed(self.camera_frame)
-
+        self.Cloud_COM.MQTT_Connect()
         # Bind keyboard events
         self.data_window.bind("<KeyPress>", self.on_key_press)
 
@@ -85,15 +88,27 @@ class Realtime_ChartWindow:
         asyncio.run(self.websocket_client.start())
 
     def on_key_press(self, event):
-        # if event.keysym == "w":
-        #     self.pitch = min(self.pitch + 5, 90)  # Limit pitch to 90 degrees
+        print('event')
+        if event.keysym == "w":
+            status =self.Cloud_COM.MQTT_SendControl("w")
+            print(status)
+        if event.keysym == "a":
+            status =self.Cloud_COM.MQTT_SendControl("a")
+            print(status)
+        if event.keysym == "s":
+            status =self.Cloud_COM.MQTT_SendControl("s")
+            print(status)
+        if event.keysym == "d":
+            status =self.Cloud_COM.MQTT_SendControl("d")
+            print(status)
         # elif event.keysym == "s":
         #     self.pitch = max(self.pitch - 5, -90)  # Limit pitch to -90 degrees
         # elif event.keysym == "a":
         #     self.yaw = max(self.yaw - 5, -180)  # Wrap around the yaw
         # elif event.keysym == "d":
         #     self.yaw = min(self.yaw + 5, 180)  # Wrap around the yaw
-        pass
+        
+
     def create_layout(self):
         self.camera_frame = ctk.CTkFrame(self.data_window, width=800, height=300)
         self.camera_frame.grid(row=0, column=0, columnspan=2, sticky="nsew")
@@ -116,7 +131,18 @@ class Realtime_ChartWindow:
         self.data_window.grid_columnconfigure(1, weight=1)
         self.data_window.grid_columnconfigure(2, weight=1)
 
+    def create_car_orientation_window(self):
+        self.orientation_window = ctk.CTkToplevel(self.root)
+        self.orientation_window.title("Car Orientation Plot")
+        self.orientation_window.geometry("800x600")
+
+        self.orientation_frame = ctk.CTkFrame(self.orientation_window, width=800, height=600)
+        self.orientation_frame.pack(fill=ctk.BOTH, expand=True)
+
+        self.create_car_orientation_plot(self.orientation_frame)
+        
     def create_car_orientation_plot(self, frame):
+
         self.orientation_fig = plt.figure(figsize=(6, 3))
         self.orientation_ax = self.orientation_fig.add_subplot(111, projection='3d')
 
@@ -175,8 +201,7 @@ class Realtime_ChartWindow:
         self.orientation_ax.set_zlim([-90, 90])
 
         self.orientation_canvas = FigureCanvasTkAgg(self.orientation_fig, master=frame)
-        self.orientation_canvas.draw()
-        self.orientation_canvas.get_tk_widget().pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.orientation_canvas.get_tk_widget().pack(side=tk.LEFT, fill=ctk.BOTH, expand=True)
 
         # Initialize battery status text
         self.battery_text = self.orientation_ax.text(
@@ -186,11 +211,10 @@ class Realtime_ChartWindow:
         )
 
         self.update_car_orientation()
+        self.update_battery_status()
 
+        
     def update_battery_status(self):
-        # Update the battery status
-        self.battery_status = max(self.battery_status - random.uniform(0.1, 0.5), 0)  # Simulate battery drain and ensure it doesn't go below 0
-
         # Remove the old text
         for text in self.orientation_ax.texts:
             text.remove()
@@ -200,13 +224,14 @@ class Realtime_ChartWindow:
 
         # Add the new text
         self.battery_text = self.orientation_ax.text(
-            180, 90, 360,  # Position it at the top-right corner
-            f"Battery: {formatted_battery_status}%",
+            180, 90, 0,  # Coordinates within the plot range
+            formatted_battery_status,
             color='black', fontsize=8, horizontalalignment='right', verticalalignment='top'
         )
         self.orientation_canvas.draw()
 
     def update_car_orientation(self):
+        print(f"Yaw: {self.yaw}, Pitch: {self.pitch}, Roll: {self.roll}")
         # Rotation matrices for yaw, pitch, roll
         roll_matrix = np.array([
             [np.cos(np.radians(self.roll)), 0, np.sin(np.radians(self.roll))],
@@ -293,9 +318,9 @@ class Realtime_ChartWindow:
         self.gyro_y_line, = ax[1].plot([], [], label="Gyro Y")
         self.gyro_z_line, = ax[2].plot([], [], label="Gyro Z")
 
-        ax[0].set_ylim(0, 2000)
-        ax[1].set_ylim(0, 2000)
-        ax[2].set_ylim(0, 2000)
+        ax[0].set_ylim(-500, 500)
+        ax[1].set_ylim(-500, 500)
+        ax[2].set_ylim(-500, 500)
 
         for a in ax:
             a.set_xlim(0, 50)
@@ -340,6 +365,7 @@ class Realtime_ChartWindow:
             self.gyro_x = data_store.gyro_x
             self.gyro_y = data_store.gyro_y
             self.gyro_z = data_store.gyro_z
+            self.battery_status = data_store.battery
 
             # Append to history
             self.yaw_history.append(self.yaw)
@@ -376,6 +402,9 @@ class Realtime_ChartWindow:
             self.update_ypr_chart()
             self.update_accel_chart()
             self.update_gyro_chart()
+            # Update battery
+            # self.update_battery_status()
+
 
             # time.sleep(1)  # Adjust the sleep interval as needed
     def run_event_loop_in_thread(self):
@@ -439,12 +468,10 @@ class Realtime_ChartWindow:
             ax.set_xlim(0, len(self.gyro_x_history))
 
         self.gyro_canvas.draw()
-
-    
-
     
 
 if __name__ == "__main__":
     root = ctk.CTk()
-    app = Realtime_ChartWindow(root)
+    app = Realtime_ChartWindow(root, cloudCOM= Cloud_COM)
     root.mainloop()
+
