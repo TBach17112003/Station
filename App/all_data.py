@@ -1,147 +1,135 @@
+import customtkinter as ctk
 import tkinter as tk
-from tkinter import ttk
-import pymongo
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from datetime import datetime
-import matplotlib.dates as mdates
+from tkinter import ttk, messagebox
+import ssl
+import urllib3
+import json
+from utils.Cloud_COM.Cloud_COM import Cloud_COM
 
-class AllData_ChartWindow(tk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.grid(row=0, column=0, sticky='nsew')
+class AllData_Chart_Window:
+    def __init__(self, root, cloud_COM: Cloud_COM):
+        self.root = root
+        self.all_data_window = ctk.CTkToplevel(root)
+        self.all_data_window.title("View All Data")
+        self.all_data_window.geometry("800x600")
+        self.all_data_window.configure(bg="#2C2F33")
         
-        # Create and configure the notebook (tabbed interface)
-        self.notebook = ttk.Notebook(self)
-        self.notebook.grid(row=0, column=0, sticky='nsew')
-        
-        # Create tabs for each data type
-        self.yaw_tab = ttk.Frame(self.notebook)
-        self.pitch_tab = ttk.Frame(self.notebook)
-        self.roll_tab = ttk.Frame(self.notebook)
-        self.accelerometer_tab = ttk.Frame(self.notebook)
-        self.gyroscope_tab = ttk.Frame(self.notebook)
-        self.battery_tab = ttk.Frame(self.notebook)
-        self.tree_tab = ttk.Frame(self.notebook)
-        
-        self.notebook.add(self.yaw_tab, text='Yaw')
-        self.notebook.add(self.pitch_tab, text='Pitch')
-        self.notebook.add(self.roll_tab, text='Roll')
-        self.notebook.add(self.accelerometer_tab, text='Accelerometer')
-        self.notebook.add(self.gyroscope_tab, text='Gyroscope')
-        self.notebook.add(self.battery_tab, text='Battery')
-        self.notebook.add(self.tree_tab, text='Temperature & Gesture')
-        
-        # Add a placeholder for matplotlib figures
-        self.yaw_figure, self.yaw_ax = plt.subplots()
-        self.pitch_figure, self.pitch_ax = plt.subplots()
-        self.roll_figure, self.roll_ax = plt.subplots()
-        self.accelerometer_figure, self.accelerometer_ax = plt.subplots()
-        self.gyroscope_figure, self.gyroscope_ax = plt.subplots()
-        self.battery_figure, self.battery_ax = plt.subplots()
-        
-        # Create canvas for each figure
-        self.yaw_canvas = FigureCanvasTkAgg(self.yaw_figure, self.yaw_tab)
-        self.pitch_canvas = FigureCanvasTkAgg(self.pitch_figure, self.pitch_tab)
-        self.roll_canvas = FigureCanvasTkAgg(self.roll_figure, self.roll_tab)
-        self.accelerometer_canvas = FigureCanvasTkAgg(self.accelerometer_figure, self.accelerometer_tab)
-        self.gyroscope_canvas = FigureCanvasTkAgg(self.gyroscope_figure, self.gyroscope_tab)
-        self.battery_canvas = FigureCanvasTkAgg(self.battery_figure, self.battery_tab)
-        
-        self.yaw_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        self.pitch_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        self.roll_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        self.accelerometer_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        self.gyroscope_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        self.battery_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        
-        # Create tree view for temperature and gesture
-        self.tree = ttk.Treeview(self.tree_tab, columns=("Type", "Value"), show='headings')
-        self.tree.heading("Type", text="Type")
-        self.tree.heading("Value", text="Value")
-        self.tree.pack(fill=tk.BOTH, expand=True)
-        
-        # Fetch and plot data
-        self.plot_data()
 
-    def plot_data(self):
-        # Connect to MongoDB
-        client = pymongo.MongoClient("mongodb://localhost:27017/")
-        db = client['your_database_name']  # Replace with your actual database name
-        collection = db['your_collection_name']  # Replace with your actual collection name
-        
-        # Fetch data from MongoDB
-        data = list(collection.find())
-        
-        # Initialize data containers
-        yaw_data = []
-        pitch_data = []
-        roll_data = []
-        accelerometer_data = []
-        gyroscope_data = []
-        battery_data = []
-        temperature_data = []
-        gesture_data = []
-        
-        for document in data:
-            timestamp = datetime.fromisoformat(document['timestamp'])  # Adjust according to your timestamp format
+        # Create a frame for the selection
+        self.selection_frame = ctk.CTkFrame(self.all_data_window, fg_color="#2C2F33")
+        self.selection_frame.pack(fill=ctk.X, pady=10)
+
+        # Create a label and combo box for date selection
+        self.date_label = ctk.CTkLabel(self.selection_frame, text="Select Date:", text_color="white", font=("MS Sans Serif", 14))
+        self.date_label.pack(side=ctk.LEFT, padx=10)
+
+        self.date_combo = ttk.Combobox(self.selection_frame, values=self.get_recent_dates())
+        self.date_combo.pack(side=ctk.LEFT, padx=10)
+        self.date_combo.bind("<<ComboboxSelected>>", self.load_data)
+
+        # Create a frame for displaying data
+        self.data_frame = ctk.CTkFrame(self.all_data_window, fg_color="#2C2F33")
+        self.data_frame.pack(expand=True, fill=ctk.BOTH, pady=10)
+
+        self.tree = ttk.Treeview(self.data_frame, columns=("Time", "Yaw", "Pitch", "Roll", "Accel", "Gyro", "Temp", "Battery"), show="headings", height=20)
+        self.tree.heading("Time", text="Time")
+        self.tree.heading("Yaw", text="Yaw")
+        self.tree.heading("Pitch", text="Pitch")
+        self.tree.heading("Roll", text="Roll")
+        self.tree.heading("Accel", text="Accel")
+        self.tree.heading("Gyro", text="Gyro")
+        self.tree.heading("Temp", text="Temp")
+        self.tree.heading("Battery", text="Battery")
+        self.tree.pack(expand=True, fill=ctk.BOTH)
+
+        self.Cloud_COM = cloud_COM
+
+        # Close button
+        self.close_button = ctk.CTkButton(self.all_data_window, text="Close", command=self.close_window, fg_color="#1DB954", text_color="white", font=("MS Sans Serif", 12, "bold"))
+        self.close_button.pack(pady=10)
+
+    def get_recent_dates(self):
+        # Replace this with actual date retrieval logic or hardcoded dates for now
+        return ["2024-08-14", "2024-08-15", "2024-08-16"]
+
+    def load_data(self, event):
+        selected_date = self.date_combo.get()
+        if selected_date:
+            # Request data for each type
+            status_orientation, data_orientation = self.Cloud_COM.RequestData_ByDate("orientation", selected_date)
+            status_accelerator, data_accelerator = self.Cloud_COM.RequestData_ByDate("accelerator", selected_date)
+            status_gyroscope, data_gyroscope = self.Cloud_COM.RequestData_ByDate("gyroscope", selected_date)
             
-            # Populate data lists
-            if 'yaw' in document:
-                yaw_data.append((timestamp, document['yaw']))
-            if 'pitch' in document:
-                pitch_data.append((timestamp, document['pitch']))
-            if 'roll' in document:
-                roll_data.append((timestamp, document['roll']))
-            if 'accelerometer' in document:
-                accelerometer_data.append((timestamp, document['accelerometer']))
-            if 'gyroscope' in document:
-                gyroscope_data.append((timestamp, document['gyroscope']))
-            if 'battery' in document:
-                battery_data.append((timestamp, document['battery']))
-            if 'temperature' in document:
-                temperature_data.append((document['temperature_type'], document['temperature_value']))
-            if 'gesture' in document:
-                gesture_data.append((document['gesture_type'], document['gesture_value']))
-        
-        # Plot each data type
-        self.plot_chart(self.yaw_ax, yaw_data, "Yaw Data", "Time", "Yaw")
-        self.plot_chart(self.pitch_ax, pitch_data, "Pitch Data", "Time", "Pitch")
-        self.plot_chart(self.roll_ax, roll_data, "Roll Data", "Time", "Roll")
-        self.plot_chart(self.accelerometer_ax, accelerometer_data, "Accelerometer Data", "Time", "Accelerometer")
-        self.plot_chart(self.gyroscope_ax, gyroscope_data, "Gyroscope Data", "Time", "Gyroscope")
-        self.plot_chart(self.battery_ax, battery_data, "Battery Data", "Time", "Battery")
-        
-        # Update tree view for temperature and gesture
-        self.tree.delete(*self.tree.get_children())
-        for temp_type, temp_value in temperature_data:
-            self.tree.insert("", tk.END, values=(f"Temperature: {temp_type}", temp_value))
-        for gesture_type, gesture_value in gesture_data:
-            self.tree.insert("", tk.END, values=(f"Gesture: {gesture_type}", gesture_value))
+            if status_orientation == 200 and status_accelerator == 200 and status_gyroscope == 200:
+                # Combine data for display
+                combined_data = self.combine_data(data_orientation, data_accelerator, data_gyroscope)
+                self.display_data(combined_data)
+            else:
+                messagebox.showerror("Error", "Failed to retrieve data.")
 
-        # Refresh the plots
-        self.yaw_canvas.draw()
-        self.pitch_canvas.draw()
-        self.roll_canvas.draw()
-        self.accelerometer_canvas.draw()
-        self.gyroscope_canvas.draw()
-        self.battery_canvas.draw()
 
-    def plot_chart(self, ax, data, title, xlabel, ylabel):
-        # Clear previous plot
-        ax.clear()
+    def combine_data(self, data_orientation, data_accelerator, data_gyroscope):
+        try:
+            # Load JSON data
+            orientation_data = json.loads(data_orientation)
+            accelerator_data = json.loads(data_accelerator)
+            gyroscope_data = json.loads(data_gyroscope)
+            
+            # Create a dictionary to store combined data
+            combined_data = []
+
+            # Assuming all data lists are the same length and sorted by time
+            for i in range(len(orientation_data)):
+                combined_entry = {
+                    "time": orientation_data[i].get("time", "N/A"),
+                    "yaw": orientation_data[i].get("yaw", "N/A"),
+                    "pitch": orientation_data[i].get("pitch", "N/A"),
+                    "roll": orientation_data[i].get("roll", "N/A"),
+                    "accel_x": accelerator_data[i].get("x", "N/A"),
+                    "accel_y": accelerator_data[i].get("y", "N/A"),
+                    "accel_z": accelerator_data[i].get("z", "N/A"),
+                    "gyro_x": gyroscope_data[i].get("x", "N/A"),
+                    "gyro_y": gyroscope_data[i].get("y", "N/A"),
+                    "gyro_z": gyroscope_data[i].get("z", "N/A"),
+                }
+                combined_data.append(combined_entry)
+            
+            # Convert combined data to JSON for display
+            return json.dumps(combined_data)
+        except (json.JSONDecodeError, IndexError) as e:
+            messagebox.showerror("Error", f"Failed to combine data: {e}")
+            return "[]"
         
-        if not data:
-            return
-        
-        # Unpack data
-        timestamps, values = zip(*data)
-        
-        # Plot data
-        ax.plot(timestamps, values, marker='o', linestyle='-')
-        ax.set_title(title)
-        ax.set_xlabel(xlabel)
-        ax.set_ylabel(ylabel)
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d %H:%M:%S'))
-        ax.xaxis.set_major_locator(mdates.HourLocator(interval=1))
-        ax.tick_params(axis='x', rotation=45)
+    def display_data(self, data):
+        try:
+            # Parse the JSON data
+            data_list = json.loads(data)
+            
+            # Clear existing data from the Treeview
+            self.tree.delete(*self.tree.get_children())
+
+            for entry in data_list:
+                # Extract data from each entry, handling missing keys
+                time = entry.get("time", "N/A")
+                yaw = entry.get("yaw", "N/A")
+                pitch = entry.get("pitch", "N/A")
+                roll = entry.get("roll", "N/A")
+                accel_x = entry.get("accel_x", "N/A")
+                accel_y = entry.get("accel_y", "N/A")
+                accel_z = entry.get("accel_z", "N/A")
+                gyro_x = entry.get("gyro_x", "N/A")
+                gyro_y = entry.get("gyro_y", "N/A")
+                gyro_z = entry.get("gyro_z", "N/A")
+                
+                # Insert data into the Treeview
+                self.tree.insert("", tk.END, values=(
+                    time, yaw, pitch, roll,
+                    accel_x, accel_y, accel_z,
+                    gyro_x, gyro_y, gyro_z
+                ))
+        except json.JSONDecodeError:
+            messagebox.showerror("Error", "Failed to decode data.")
+
+
+    def close_window(self):
+        self.all_data_window.destroy()
