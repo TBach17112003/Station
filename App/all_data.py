@@ -10,7 +10,7 @@ import threading
 class AllData_Chart_Window:
     def __init__(self, root, cloud_COM):
         self.root = root
-        self.allDateTypes = ['', 'Orientation', 'Accelerator', 'Gyroscope', 'Gesture', 'Battery']
+        self.allDateTypes = ['', 'Orientation', 'Accelerator', 'Gyroscope', 'Gesture', 'Battery','errorMsg']
         self.queryDataType = "Orientation"
         self.queryDate = None
         self.Datatree = None
@@ -109,6 +109,9 @@ class AllData_Chart_Window:
     def queryData(self):
         try:
             if self.queryDate:
+                # if self.queryDataType == 'errorMsg':
+                #     queryStatus, Data = self.Cloud_COM.RequestData_By(self.queryDataType.lower())
+                # else:
                 queryStatus, Data = self.Cloud_COM.RequestData_ByDate(self.queryDataType.lower(), self.queryDate)
                 if queryStatus == 200:
                     if Data == "[]":
@@ -154,10 +157,14 @@ class AllData_Chart_Window:
             self.Datatree.destroy()
 
         columnsList = ['deviceId']
-        for key in self.data_dict[0][self.queryDataType].keys():
-            columnsList.append(key)
+        if self.data_dict[0][self.queryDataType] is dict:
+            print('After')
+            for key in self.data_dict[0][self.queryDataType].keys():
+                columnsList.append(key)
+        else:
+            columnsList.append(self.queryDataType)
         columnsList.append('recordTime')
-
+        print(columnsList)
         style = ttk.Style()
         style.configure("Treeview.Heading", font=("Times New Roman", 12))
         style.configure("Treeview", font=("Times New Roman", 12))
@@ -187,8 +194,11 @@ class AllData_Chart_Window:
 
         for entry in page_data:
             DataList = [entry.get('deviceId', 'N/A')]
-            for key in entry[self.queryDataType].values():
-                DataList.append(key)
+            if entry[self.queryDataType] is dict:
+                for key in entry[self.queryDataType].values():
+                    DataList.append(key)
+            else:
+                DataList.append(entry[self.queryDataType])
             DataList.append(entry.get("recordTime", "N/A"))
             self.Datatree.insert("", tk.END, values=DataList)
 
