@@ -1,4 +1,3 @@
-# websocket_client.py
 import asyncio
 import websockets
 import json
@@ -10,11 +9,19 @@ class WebSocketClient:
         self.uri = uri
         self.cert_path = cert_path
         self.data_store = DataStore()
+        self._stop_event = asyncio.Event()  # Event to signal stopping
+        self._websocket = None  # To store the websocket connection
 
     async def listen_for_messages(self, websocket):
+        self._websocket = websocket
         try:
-            while True:
-                msg = await websocket.recv()
+            while not self._stop_event.is_set():
+                try:
+                    msg = await websocket.recv()
+                except websockets.exceptions.ConnectionClosed:
+                    print("WebSocket connection closed by server.")
+                    break
+                
                 if msg == '1':
                     await self.manage_pings(websocket)
                     continue
@@ -30,10 +37,13 @@ class WebSocketClient:
                 self.data_store.gyro_x = msgObj["Gyroscope"]["x"]
                 self.data_store.gyro_y = msgObj["Gyroscope"]["y"]
                 self.data_store.gyro_z = msgObj["Gyroscope"]["z"]
+                self.data_store.battery = msgObj["Battery"]["Capacity"]
+                self.data_store.temperature = msgObj["Battery"]["Temperature"]
 
-        except websockets.exceptions.ConnectionClosed:
-            print("WebSocket connection closed by server.")
-
+        finally:
+            if websocket:
+                await websocket.close()
+    
     async def manage_pings(self, websocket):
         await websocket.send(bytearray([1]))
 
@@ -45,4 +55,10 @@ class WebSocketClient:
             await self.listen_for_messages(websocket)
 
     def start(self):
+        self._stop_event.clear()  # Ensure the stop event is not set
         asyncio.run(self.connect())
+    
+    def stop(self):
+        self._stop_event.set()  # Signal the event loop to stop
+        if self._websocket is not None:
+            asyncio.run(self._websocket.close())  # Close the WebSocket connection
