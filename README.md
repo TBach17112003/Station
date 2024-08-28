@@ -30,6 +30,12 @@ pip install -r requirements.txt
 ```
 This will install all the required dependencies specified in the requirements.txt file.
 
+Connect the BuuMinh_2.4G or BuuMinh_5G
+Password:
+```
+11051995
+```
+
 **3. Login Credentials**
 
 Use the following credentials to log in:
