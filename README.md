@@ -1,4 +1,4 @@
-****FOTA Station**
+**FOTA Station**
 
 
 This application allows users to manage software files, view and control data in real-time, and access historical data. Follow the instructions below to set up and run the program.
