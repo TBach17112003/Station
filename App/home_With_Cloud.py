@@ -70,6 +70,9 @@ class HomeWindow:
         self.chart_window = None
         self.all_data_window = None
 
+        # Bind the destroy event for the home window
+        self.root.protocol("WM_DELETE_WINDOW", self.on_home_window_close)
+
     def choose_file_type_for_upload(self):
         self.file_type_window = ctk.CTkToplevel(self.root)
         self.file_type_window.title("Choose File Type")
@@ -135,11 +138,8 @@ class HomeWindow:
         big_update_version = major_version + 1
 
         # Calculate the next minor version correctly
-        if minor_version < 9:
-            small_update_version = f"{major_version}.{minor_version + 1}"
-        else:
-            # If minor_version is 9, roll over to the next major version
-            small_update_version = f"{major_version + 1}.0"
+        
+        small_update_version = f"{major_version}.{minor_version + 1}"
 
         # Display buttons for big and small updates
         next_button = ctk.CTkButton(
@@ -264,7 +264,12 @@ class HomeWindow:
     def open_in_idle(self, event):
         selected_item = event.widget.selection()[0]
         file_path = event.widget.item(selected_item)['values'][1]
-        subprocess.Popen([sys.executable, '-m', 'idlelib', file_path])
+
+        try:
+            # Attempt to open the file in IDLE
+            subprocess.Popen([sys.executable, '-m', 'idlelib.idle', file_path])
+        except Exception as e:
+            print(f"Failed to open IDLE: {e}")
 
     def open_chart_window(self):
         if self.chart_window is None or not self.chart_window.data_window.winfo_exists():
@@ -292,11 +297,11 @@ class HomeWindow:
         self.all_data_window = None
         #self.root.destroy()
 
-    def on_close(self):
+    def on_home_window_close(self):
         #Ensure the chart window is destroyed when the main window is closed
         if self.chart_window and self.chart_window.data_window.winfo_exists():
             self.chart_window.data_window.destroy()
         if self.all_data_window and self.all_data_window.all_data_window.winfo_exists():
             self.all_data_window.all_data_window.destroy()
-        self.root.destroy()
+        self.root.quit()
         pass
