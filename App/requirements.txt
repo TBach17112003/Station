@@ -1,0 +1,4 @@
+hub==3.0.1
+paho_mqtt==2.1.0
+urllib3==2.2.2
+utime==1.1.7
