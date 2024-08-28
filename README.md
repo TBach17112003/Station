@@ -26,6 +26,7 @@ git clone (https://github.com/TBach17112003/Station.git)
 Navigate to the project directory and install the necessary Python packages using pip:
 
 ```
+$ cd App
 pip install -r requirements.txt
 ```
 This will install all the required dependencies specified in the requirements.txt file.
