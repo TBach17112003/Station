@@ -153,7 +153,7 @@ class Cloud_COM:
         self.MQTTclient.publish(CONTROL_TOPIC,CMD,qos=1)
 
     def recvSW_Ver(self,SWName):
-        match = re.match(r"n_(.*)_v([\d]+)\.([\d]+)", SWName)
+        match = re.match(r"v_(.*)_v([\d]+)\.([\d]+)", SWName)
         if match == None:
             return 
         SWType,MajorVer,MinorVer = match.groups()
@@ -184,6 +184,17 @@ class Cloud_COM:
         response = http.request('GET',uri )
         return response.status,response.data.decode('utf-8')
 
+    def RequestData(self,DataType: str):
+        # Create a custom SSL context
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        # ssl_context.set_ciphers("AES256-SHA")
+        ssl_context.load_verify_locations(cafile=self.ca_cert_path)
+        http = urllib3.PoolManager(
+            ssl_context = ssl_context
+        )
+        uri = f'https://begvn.home:9090/data/{DataType}'
+        response = http.request('GET',uri )
+        return response.status,response.data.decode('utf-8')
 
     def isSendingInProgress(self):
         return self.sending_in_progress
