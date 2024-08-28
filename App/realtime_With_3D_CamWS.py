@@ -90,6 +90,12 @@ class Realtime_ChartWindow:
         self.websocket_client.stop()
         self.websocket_client_video.stop()
         print("Stop ws")
+        #self.root.quit()  # This stops the main Tkinter event loop if necessary
+        #print("Stopped WebSocket clients and other threads")
+
+    def on_close(self):
+        self.stop()  # Stop background tasks
+        self.data_window.destroy()  # Close the window
 
     def run_websocket_client(self):
         asyncio.run(self.websocket_client_video.start())
@@ -283,8 +289,8 @@ class Realtime_ChartWindow:
         ])
         
         yaw_matrix = np.array([
-            [np.cos(np.radians(self.yaw)), -np.sin(np.radians(self.yaw)), 0],
-            [np.sin(np.radians(self.yaw)), np.cos(np.radians(self.yaw)), 0],
+            [np.cos(np.radians(-self.yaw)), -np.sin(np.radians(-self.yaw)), 0],
+            [np.sin(np.radians(-self.yaw)), np.cos(np.radians(-self.yaw)), 0],
             [0, 0, 1]
         ])
 
@@ -395,7 +401,7 @@ class Realtime_ChartWindow:
         self.gyro_canvas.get_tk_widget().pack(side=tk.LEFT, fill=ctk.BOTH, expand=True)
 
     def create_webcam_feed(self, frame):
-        self.webcam_label = ctk.CTkLabel(frame)
+        self.webcam_label = ctk.CTkLabel(frame, text="")
         self.webcam_label.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         self.update_webcam_feed()
