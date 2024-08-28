@@ -1,5 +1,7 @@
 ****FOTA Station**
-****This application allows users to manage software files, view and control data in real-time, and access historical data. Follow the instructions below to set up and run the program.
+
+
+This application allows users to manage software files, view and control data in real-time, and access historical data. Follow the instructions below to set up and run the program.
 
 **Features**
 Upload and Manage Software Files: Upload new files, choose SW targets, and select SW versions.
