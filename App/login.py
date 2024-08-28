@@ -55,5 +55,5 @@ if __name__ == "__main__":
     ctk.set_default_color_theme("dark-blue")
 
     root = ctk.CTk()
-    app = home_With_Cloud.HomeWindow(root)
+    app = LoginWindow(root)
     root.mainloop()
