@@ -19,7 +19,7 @@ Getting Started
 To get started, clone the repository to your local machine using the following command:
 
 ```
-git clone (https://github.com/TBach17112003/Station.git)
+git clone https://github.com/TBach17112003/Station.git
 ```
 **2. Install Dependencies**
 
