@@ -59,7 +59,7 @@ class WebSocketClient:
     def start(self):
         self._running = True
         asyncio.run(self.connect())
-        print("run")
+        # print("run")
     
     def stop(self):
         self._running = False

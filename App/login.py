@@ -1,9 +1,9 @@
 import customtkinter as ctk
 from tkinter import messagebox
-import home
+# import home
 import home_With_Cloud
 class LoginWindow:
-    def __init__(self, root):
+    def __init__(self, root: ctk.CTk):
         self.root = root
         self.root.title("Login")
         self.root.geometry("300x180")
@@ -34,6 +34,11 @@ class LoginWindow:
         # Bind the Enter key to the login function
         self.root.bind('<Return>', self.on_enter_key)
 
+    def __del__(self):
+        print('Del')
+        self.main_window.destroy()
+
+
     def on_enter_key(self, event):
         self.validate_login()
 
@@ -43,12 +48,16 @@ class LoginWindow:
         
         if username == "admin" and password == "admin@@":
             self.root.destroy()
-            main_window = ctk.CTk()
-            home_With_Cloud.HomeWindow(main_window)
-            main_window.mainloop()
+            self.main_window = ctk.CTk()
+            home_With_Cloud.HomeWindow(self.main_window)
+            self.main_window.protocol("WM_DELETE_WINDOW", self.on_main_window_close)
+            self.main_window.mainloop()
         else:
             messagebox.showerror("Error", "Incorrect username or password")
              
+    def on_main_window_close(self):
+        self.main_window.destroy()
+
 
 if __name__ == "__main__":
     ctk.set_appearance_mode("dark")

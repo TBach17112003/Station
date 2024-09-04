@@ -14,7 +14,7 @@ import urllib3
 File_path = os.path.abspath(__file__)
 Folder_Dir = os.path.dirname(File_path)
 sys.path.append(Folder_Dir)
-print(sys.path)
+# print(sys.path)
 
 CONTROL_TOPIC='/jetson/control'
 
@@ -47,6 +47,7 @@ class Cloud_COM:
                     protocol=mqtt.MQTTv5,
                     transport=self.MQTTProtocol)
         self.MQTTclient.tls_set(ca_certs=self.ca_cert_path)
+        self.MQTTclient.on_disconnect = self.MQTT_ON_Disconnect
         self.isFTPConnected = False
         self.isMQTTConnected = False
         self.sending_in_progress = False
@@ -72,8 +73,8 @@ class Cloud_COM:
 
     def startConnect(self):
         try:
-            if not self.isFTPConnected:
-                self.FTP_Connect()
+            # if not self.isFTPConnected:
+            #     self.FTP_Connect()
             if not self.isMQTTConnected:
                 self.MQTT_Connect()
             return True, ""
@@ -114,7 +115,7 @@ class Cloud_COM:
         self.MQTTclient.loop_start()
         for SWTopic in self.SWTopic_list:
             StatusCode = self.MQTTclient.subscribe(SWTopic,qos=1)
-            # print(StatusCode)
+            print(StatusCode)
         self.MQTTclient.on_message = self.MQTT_On_message
         self.isMQTTConnected = True
 
@@ -124,10 +125,14 @@ class Cloud_COM:
             self.MQTTclient.disconnect()
             self.isMQTTConnected = False
 
+    def MQTT_ON_Disconnect(self,client, userdata, reason_code, properties):
+        print('MQTT Disconnected: ',reason_code)
+
+
     def MQTT_On_message(self,client, userdata, message: mqtt.MQTTMessage):
-        print(message.payload.decode())
         payload = message.payload.decode()
         topic = message.topic
+        # print(topic, message.payload.decode())
         if topic == 'SWUpload':
             print('Upload: ',payload)
             if payload == 'Done':
@@ -136,24 +141,18 @@ class Cloud_COM:
             elif payload == "Fail":
                 self.SendStatus = False
                 self.isSendDone = True
-
             else:
                 return
-        # elif topic == 'SW/Jetson/FOTA_Master_Boot':
-        #     self.MasterBoot_SW = payload
-        # elif topic == 'SW/Jetson/FOTA_Master_App':
-        #     self.MasterApp_SW = payload
-        # elif topic == 'SW/Jetson/FOTA_Master_Client':
-        #     self.Client_SW = payload
         elif topic in self.SWTopic_list:
             self.recvSW_Ver(payload)
         # self.MQTT_Disconnect()
 
     def MQTT_SendControl(self,CMD):
-        self.MQTTclient.publish(CONTROL_TOPIC,CMD,qos=1)
+        print(self.MQTTclient.publish(CONTROL_TOPIC,CMD,qos=1))
 
     def recvSW_Ver(self,SWName):
-        match = re.match(r"n_(.*)_v([\d]+)\.([\d]+)", SWName)
+        print('Check ver')
+        match = re.match(r"v_(.*)_v([\d]+)\.([\d]+)", SWName)
         if match == None:
             return 
         SWType,MajorVer,MinorVer = match.groups()
@@ -199,8 +198,10 @@ class Cloud_COM:
 
 
     def _send_sw_thread(self, SWpath,SendSWCB):
-        connect_Status = self.startConnect()
-        if connect_Status == False:
+        # connect_Status = self.startConnect()
+        if not self.isFTPConnected:
+                self.FTP_Connect()
+        if  self.isFTPConnected == False:
             SendSWCB(SWname,False)
             return 
         # self.isSendDone.clear()
@@ -236,7 +237,7 @@ class Cloud_COM:
         finally:
             self.sending_in_progress = False
             self.FTP_Disconnect()
-            self.MQTT_Disconnect()
+            # self.MQTT_Disconnect()
 
     def _wait_for_upload_status(self):
         self.isSendDone.wait()  # This will block until the MQTT message is received

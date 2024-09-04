@@ -62,10 +62,10 @@ class HomeWindow:
 
         self.Cloud_COM = Cloud_COM()
         success, error_message = self.Cloud_COM.startConnect()
-        # print(self.Cloud_COM.getSW_Ver('FOTA_Master_Boot'))
-        if not success:
-            messagebox.showerror("Error", f"Server connection failed: {error_message}")
-            exit()
+        # # print(self.Cloud_COM.getSW_Ver('FOTA_Master_Boot'))
+        # if not success:
+        #     messagebox.showerror("Error", f"Server connection failed: {error_message}")
+        #     exit()
 
         self.chart_window = None
         self.all_data_window = None
@@ -173,7 +173,7 @@ class HomeWindow:
     def get_current_version(self, file_type):
         # Attempt to get the version from Cloud_COM using the SWType (file_type)
         cloud_version = self.Cloud_COM.getSW_Ver(file_type)
-        
+        print('Current ver: ',cloud_version)
         # Check if a valid version was retrieved
         if cloud_version is not None:
             try:
@@ -275,6 +275,7 @@ class HomeWindow:
     def on_chart_window_close(self):
         if self.chart_window:
             self.chart_window.data_window.destroy()
+        self.chart_window.car_updating = False
         self.chart_window.stop()
         self.chart_window = None
 

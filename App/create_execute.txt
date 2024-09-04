@@ -1,0 +1,1 @@
+python -m PyInstaller --onedir --add-data C:\Users\GKU3HC\AppData\Roaming\Python\Python39\site-packages\customtkinter:customtkinter --noconsole --onedir --add-data C:\Users\GKU3HC\Desktop\FOTA\FOTA-CBDS_Station\utils:utils  --name FOTA_App new_ver.py

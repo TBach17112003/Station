@@ -62,7 +62,7 @@ class Realtime_ChartWindow:
         # Create car orientation plot
         self.create_car_orientation_plot(self.orientation_frame)
 
-        self.websocket_client = WebSocketClient(uri="wss://begvn.home:9090/realtime/data", cert_path=r'C:\Users\HOB6HC\Code_Source\FOTA_Station\App\ca.crt')
+        self.websocket_client = WebSocketClient(uri="wss://begvn.home:9090/realtime/data", cert_path='./ca.crt')
         
         # Start WebSocket client in a separate thread
         self.websocket_thread = threading.Thread(target=self.websocket_client.start)
@@ -70,51 +70,60 @@ class Realtime_ChartWindow:
         self.websocket_thread.start()
 
         # Start data update threads
+        self.car_updating = True
         self.update_data_thread = threading.Thread(target=self.run_event_loop_in_thread, daemon=True)
         self.update_car_orientation_thread = threading.Thread(target=self.update_car_orientation_continuously, daemon=True)
         self.update_data_thread.start()
         self.update_car_orientation_thread.start()
 
         # Initialize WebSocket client
-        self.websocket_client_video = WebSocketCameraClient("wss://begvn.home:9090/realtime/streaming", capath=r'C:\Users\HOB6HC\Code_Source\FOTA_Station\App\ca.crt')
+        self.websocket_client_video = WebSocketCameraClient("wss://begvn.home:9090/realtime/streaming", capath='./ca.crt')
         self.websocket_thread = threading.Thread(target=self.run_websocket_client, daemon=True)
         self.websocket_thread.start()
 
         # Start webcam feed
         self.create_webcam_feed(self.camera_frame)
-        self.Cloud_COM.MQTT_Connect()
+        # self.Cloud_COM.MQTT_Connect()
         # Bind keyboard events
         self.data_window.bind("<KeyPress>", self.on_key_press)
 
     def stop(self):
         self.websocket_client.stop()
         self.websocket_client_video.stop()
+        self.car_updating = False
         print("Stop ws")
 
     def run_websocket_client(self):
         asyncio.run(self.websocket_client_video.start())
 
     def on_key_press(self, event):
-        print('event')
-        if event.keysym == "w":
-            status =self.Cloud_COM.MQTT_SendControl("w")
-            print(status)
-        if event.keysym == "a":
-            status =self.Cloud_COM.MQTT_SendControl("a")
-            print(status)
-        if event.keysym == "s":
-            status =self.Cloud_COM.MQTT_SendControl("s")
-            print(status)
-        if event.keysym == "d":
-            status =self.Cloud_COM.MQTT_SendControl("d")
-            print(status)
+        # print('event')
+        # if event.keysym == "w":
+        #     status =self.Cloud_COM.MQTT_SendControl("w")
+        #     print(status)
+        # if event.keysym == "a":
+        #     status =self.Cloud_COM.MQTT_SendControl("a")
+        #     print(status)
+        # if event.keysym == "s":
+        #     status =self.Cloud_COM.MQTT_SendControl("s")
+        #     print(status)
+        # if event.keysym == "d":
+        #     status =self.Cloud_COM.MQTT_SendControl("d")
+        #     print(status)
+        # if event.keysym == "q":
+        #     status =self.Cloud_COM.MQTT_SendControl("q")
+        #     print(status)
         # elif event.keysym == "s":
         #     self.pitch = max(self.pitch - 5, -90)  # Limit pitch to -90 degrees
         # elif event.keysym == "a":
         #     self.yaw = max(self.yaw - 5, -180)  # Wrap around the yaw
         # elif event.keysym == "d":
         #     self.yaw = min(self.yaw + 5, 180)  # Wrap around the yaw
-        pass
+
+        status =self.Cloud_COM.MQTT_SendControl(event.keysym)
+        print(status)
+        # pass
+        
     def create_layout(self):
         #separate frame for charts, car orientation, camera
         self.camera_frame = ctk.CTkFrame(self.data_window, width=800, height=300)
@@ -277,8 +286,8 @@ class Realtime_ChartWindow:
         ])
         
         yaw_matrix = np.array([
-            [np.cos(np.radians(self.yaw)), -np.sin(np.radians(self.yaw)), 0],
-            [np.sin(np.radians(self.yaw)), np.cos(np.radians(self.yaw)), 0],
+            [np.cos(np.radians(-self.yaw)), -np.sin(np.radians(-self.yaw)), 0],
+            [np.sin(np.radians(-self.yaw)), np.cos(np.radians(-self.yaw)), 0],
             [0, 0, 1]
         ])
 
@@ -299,7 +308,7 @@ class Realtime_ChartWindow:
         self.orientation_canvas.draw()
 
     def update_car_orientation_continuously(self):
-        while True:
+        while self.car_updating:
             self.update_car_orientation()
             self.update_battery_status()
             #time.sleep(0.1)
@@ -407,7 +416,7 @@ class Realtime_ChartWindow:
 
     async def update_data(self):
         
-        while True:
+        while self.car_updating:
             data_store = DataStore()
             
             # Use values from DataStore
@@ -525,3 +534,4 @@ if __name__ == "__main__":
     root = ctk.CTk()
     app = Realtime_ChartWindow(root)
     root.mainloop()
+    root.destroy()
